@@ -246,20 +246,24 @@ const audio = document.querySelector("#bg-music");
 const musicButton = document.querySelector("#music-toggle");
 let audioPending = false;
 let automaticMusic = true;
-let scrollMusicAttempted = false;
 let musicNeedsGesture = false;
 const initialScrollY = window.scrollY;
 
 function updateMusic() {
-  const playing = !audio.paused;
-  musicButton.setAttribute("aria-pressed", String(playing));
+  const audible = !audio.paused && !audio.muted && !mutedAutoplayActive;
+  const isMutedPlaying = !audio.paused && mutedAutoplayActive;
+  const playing = audible;
+  musicButton.setAttribute("aria-pressed", String(playing || isMutedPlaying));
   musicButton.setAttribute(
     "aria-label",
     playing ? "Pause celebration music" : "Play celebration music",
   );
-  musicButton.querySelector(".music-label").textContent = playing
-    ? "Music on"
-    : musicNeedsGesture ? "Tap for music" : "A little music?";
+  let label = "A little music?";
+  if (playing) label = "Music on";
+  else if (isMutedPlaying || musicNeedsGesture) label = "Tap for music";
+  musicButton.querySelector(".music-label").textContent = label;
+  // pulsate hint when gesture needed or muted autoplay
+  musicButton.classList.toggle("needs-gesture", (musicNeedsGesture || isMutedPlaying) && !playing);
 }
 
 function stopAutomaticMusic() {
@@ -267,20 +271,49 @@ function stopAutomaticMusic() {
   window.removeEventListener("scroll", onMusicScroll);
   window.removeEventListener("wheel", onMusicWheel);
   window.removeEventListener("touchmove", onMusicTouchMove);
+  window.removeEventListener("touchend", onInteractionGesture);
+  window.removeEventListener("click", onInteractionGesture);
+  window.removeEventListener("pointerdown", onInteractionGesture);
   document.removeEventListener("keydown", onMusicKey);
   document.removeEventListener("pointerup", onMusicGesture);
 }
 
-async function startMusic(manual = false) {
+let mutedAutoplayActive = false;
+async function startMusic(manual = false, opts = {}) {
+  // If already playing muted via autoplay, just unmute on gesture
+  if (mutedAutoplayActive && !audio.paused) {
+    audio.muted = false;
+    mutedAutoplayActive = false;
+    stopAutomaticMusic();
+    updateMusic();
+    return;
+  }
   if (audioPending || !audio.paused) return;
   audioPending = true;
-  musicNeedsGesture = false;
   try {
+    // First try muted autoplay (allowed without gesture)
+    if (!manual && !opts.unmuted) {
+      try {
+        audio.muted = true;
+        audio.volume = 0.35;
+        await audio.play();
+        // Keep muted playing, wait for user gesture to unmute
+        mutedAutoplayActive = true;
+        musicNeedsGesture = true; // prompt to tap to hear
+        updateMusic();
+        // Keep listeners alive to unmute
+        return;
+      } catch {}
+      audio.muted = false;
+    }
     audio.volume = 0.35;
+    audio.muted = false;
     await audio.play();
+    mutedAutoplayActive = false;
     stopAutomaticMusic();
   } catch (error) {
-    musicNeedsGesture = (manual || automaticMusic) && error.name === "NotAllowedError";
+    musicNeedsGesture = error.name === "NotAllowedError";
+    mutedAutoplayActive = false;
     if (manual) notify("Music could not play. Please try again.");
   } finally {
     audioPending = false;
@@ -289,9 +322,8 @@ async function startMusic(manual = false) {
 }
 
 function startMusicOnScroll() {
-  if (!automaticMusic || scrollMusicAttempted) return;
-  scrollMusicAttempted = true;
-  void startMusic();
+  if (!automaticMusic) return;
+  void startMusic(false);
 }
 function onMusicScroll() {
   if (window.scrollY !== initialScrollY) startMusicOnScroll();
@@ -302,36 +334,57 @@ function onMusicWheel(event) {
 function onMusicTouchMove() {
   startMusicOnScroll();
 }
+function onInteractionGesture(event) {
+  if (event.target.closest("#music-toggle")) return;
+  if (automaticMusic) void startMusic(false, { unmuted: true });
+}
 function onMusicKey(event) {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest("input, textarea, select, button, a, [contenteditable]")) return;
   if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(event.key)) {
-    if (automaticMusic && musicNeedsGesture) void startMusic();
-    else startMusicOnScroll();
+    if (automaticMusic) void startMusic(false, { unmuted: true });
   }
 }
 function onMusicGesture(event) {
   if (event.target.closest("#music-toggle")) return;
-  if (automaticMusic && musicNeedsGesture) void startMusic();
+  if (automaticMusic) void startMusic(false, { unmuted: true });
 }
 window.addEventListener("scroll", onMusicScroll, { passive: true });
 window.addEventListener("wheel", onMusicWheel, { passive: true });
 window.addEventListener("touchmove", onMusicTouchMove, { passive: true });
+window.addEventListener("touchend", onInteractionGesture, { passive: true });
+window.addEventListener("click", onInteractionGesture, { passive: true });
+window.addEventListener("pointerdown", onInteractionGesture, { passive: true });
 document.addEventListener("keydown", onMusicKey);
 document.addEventListener("pointerup", onMusicGesture);
+// Try muted autoplay shortly after load (allowed by most browsers)
+setTimeout(() => {
+  if (automaticMusic && audio.paused) void startMusic(false);
+}, 600);
 
 musicButton.addEventListener("click", () => {
+  // If muted autoplay is active, first tap should unmute, not pause
+  if (mutedAutoplayActive && !audio.paused) {
+    audio.muted = false;
+    mutedAutoplayActive = false;
+    stopAutomaticMusic();
+    updateMusic();
+    return;
+  }
   stopAutomaticMusic();
   musicNeedsGesture = false;
+  mutedAutoplayActive = false;
   if (audioPending) {
     audio.pause();
     updateMusic();
     return;
   }
-  if (!audio.paused) {
+  if (!audio.paused && !audio.muted) {
     audio.pause();
     updateMusic();
   } else {
+    // Ensure we clear muted flag before manual play
+    audio.muted = false;
     void startMusic(true);
   }
 });
@@ -339,6 +392,7 @@ audio.addEventListener("play", updateMusic);
 audio.addEventListener("pause", updateMusic);
 audio.addEventListener("error", () => {
   musicNeedsGesture = false;
+  mutedAutoplayActive = false;
   stopAutomaticMusic();
   updateMusic();
   notify("Music is unavailable right now. Please try again later.");

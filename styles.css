@@ -2479,3 +2479,13 @@ footer > span{color:#e2d3b8}
 .family-pair{display:none !important}
 .couple-names{display:none !important}
 
+
+.music-widget button.needs-gesture{
+  animation: music-pulse 1.6s ease-in-out infinite;
+  border-color:#e8a87c;
+  box-shadow:0 0 0 6px rgba(232,168,124,.18);
+}
+@keyframes music-pulse{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.04)}
+}
