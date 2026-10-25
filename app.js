@@ -239,6 +239,20 @@ let audioPending = false;
 let automaticMusic = true;
 let musicNeedsGesture = false;
 let mutedAutoplaySucceeded = false;
+// mobile debug visible on screen for 10s — helps diagnose on phone without console
+let _debugEl = null;
+function dbg(msg){
+  console.log(msg);
+  try {
+    if (!_debugEl) {
+      _debugEl = document.createElement("div");
+      _debugEl.style.cssText="position:fixed;bottom:68px;left:8px;right:8px;z-index:99999;background:rgba(20,15,10,.92);color:#fffbe9;font:11px/1.4 monospace;padding:8px 10px;border-radius:10px;pointer-events:none;max-height:40vh;overflow:auto";
+      document.body.appendChild(_debugEl);
+      setTimeout(()=>{_debugEl.style.display="none"},15000);
+    }
+    _debugEl.textContent = msg + "\n" + _debugEl.textContent.slice(0,600);
+  } catch{}
+}
 // initialize audio for autoplay-muted strategy (allowed without gesture)
 audio.volume = 0.35;
 audio.muted = true;
@@ -250,6 +264,7 @@ setTimeout(() => {
   if (!audio.paused && audio.muted) {
     mutedAutoplaySucceeded = true;
     musicNeedsGesture = true;
+    dbg("[music] muted autoplay active — scroll/touch will unmute");
     updateMusic();
   }
 }, 400);
@@ -281,44 +296,54 @@ function stopAutomaticMusic() {
   automaticMusic = false;
   window.removeEventListener("scroll", onMusicScroll, { passive: true });
   window.removeEventListener("wheel", onMusicWheel, { passive: true });
-  window.removeEventListener("touchmove", onMusicTouchMove, { passive: true });
-  window.removeEventListener("touchstart", onFirstInteraction, { passive: true });
-  window.removeEventListener("mousedown", onFirstInteraction, { passive: true });
-  window.removeEventListener("pointerdown", onFirstInteraction, { passive: true });
-  window.removeEventListener("click", onFirstInteraction, { passive: true });
+  window.removeEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
+  window.removeEventListener("touchstart", onFirstInteraction, { passive: true, capture: true });
+  window.removeEventListener("touchend", onMusicTouchEnd, { passive: true, capture: true });
+  window.removeEventListener("mousedown", onFirstInteraction, { passive: true, capture: true });
+  window.removeEventListener("pointerdown", onFirstInteraction, { passive: true, capture: true });
+  window.removeEventListener("pointerup", onMusicGesture, { passive: true, capture: true });
+  window.removeEventListener("click", onFirstInteraction, { passive: true, capture: true });
+  document.removeEventListener("touchstart", onFirstInteraction, { passive: true, capture: true });
+  document.removeEventListener("touchend", onMusicTouchEnd, { passive: true, capture: true });
+  document.removeEventListener("pointerdown", onFirstInteraction, { passive: true, capture: true });
+  document.removeEventListener("pointerup", onMusicGesture, { passive: true, capture: true });
+  document.removeEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
   document.removeEventListener("keydown", onMusicKey);
   document.removeEventListener("pointerup", onMusicGesture);
 }
 
 async function startMusic(manual = false, trigger = "") {
-  if (audioPending) return;
+  // allow unmute path even when a previous play() is pending — critical for mobile where pointerdown->touchend are <100ms apart
+  const isUnmuteOnly = !audio.paused && (audio.muted || mutedAutoplaySucceeded);
+  if (audioPending && !isUnmuteOnly) {
+    dbg("[music] blocked pending "+trigger);
+    return;
+  }
   // If already playing (possibly muted autoplay), just unmute — don't call play() again
   // Unmuting an already-playing muted stream is more likely to be allowed on wheel/scroll than play()
-  if (!audio.paused) {
-    if (audio.muted || mutedAutoplaySucceeded) {
-      console.log("[music] unmuting playing stream via", trigger);
-      audio.muted = false;
-      mutedAutoplaySucceeded = false;
-      audio.volume = 0.35;
-      // Only call play() if it actually paused after unmuting (some browsers pause on unmute)
-      if (audio.paused) {
-        try { await audio.play(); } catch(e){ console.log("[music] play after unmute failed", e.name); }
-      }
-      // Check if we actually got audible
-      setTimeout(() => {
-        if (!audio.paused && !audio.muted) {
-          stopAutomaticMusic();
-          musicNeedsGesture = false;
-          updateMusic();
-        }
-      }, 100);
-      stopAutomaticMusic();
-      musicNeedsGesture = false;
-      updateMusic();
-      return;
+  if (isUnmuteOnly) {
+    dbg("[music] unmuting playing stream via "+trigger);
+    audio.muted = false;
+    mutedAutoplaySucceeded = false;
+    audio.volume = 0.35;
+    // Only call play() if it actually paused after unmuting (some browsers pause on unmute)
+    if (audio.paused) {
+      try { await audio.play(); dbg("[music] play after unmute ok "+trigger); } catch(e){ dbg("[music] play after unmute failed "+e.name); }
     } else {
-      return;
+      dbg("[music] unmuted without play() via "+trigger+" — audible now");
     }
+    // Check if we actually got audible
+    setTimeout(() => {
+      if (!audio.paused && !audio.muted) {
+        stopAutomaticMusic();
+        musicNeedsGesture = false;
+        updateMusic();
+      }
+    }, 100);
+    stopAutomaticMusic();
+    musicNeedsGesture = false;
+    updateMusic();
+    return;
   }
   audioPending = true;
   musicNeedsGesture = false;
@@ -330,46 +355,47 @@ async function startMusic(manual = false, trigger = "") {
     stopAutomaticMusic();
     console.log("[music] audible play succeeded on first gesture");
   } catch (error) {
-    console.log("[music] audible play blocked on", trigger, ":", error.name);
+    dbg("[music] audible blocked on "+trigger+": "+(error.name||error.message));
     musicNeedsGesture = true;
     // Wheel/scroll alone is never a valid gesture in Chrome, so audible will always fail there.
     // Start muted playback immediately (allowed without gesture), then next real gesture (click/touch/mousedown) will just unmute.
+    // On mobile, touchstart alone is NOT yet an activation — touchend/pointerup IS, so we keep muted stream for the upcoming touchend
     if (!audio.muted) {
       try {
-        console.log("[music] starting muted stream (allowed without gesture)");
+        dbg("[music] starting muted stream (allowed without gesture)");
         audio.muted = true;
         await audio.play();
         mutedAutoplaySucceeded = true;
         musicNeedsGesture = true;
         updateMusic();
-        // Try immediate unmute without calling play() — just flipping muted flag
-        // This sometimes passes for wheel where play() would not, but flipping muted might
-        try {
-          console.log("[music] trying immediate unmute-only (no play) on", trigger);
-          audio.muted = false;
-          audio.volume = 0.35;
-          mutedAutoplaySucceeded = false;
-          // verify it stuck
-          if (!audio.paused && !audio.muted) {
-            stopAutomaticMusic();
-            musicNeedsGesture = false;
+        dbg("[music] muted stream playing — next touchend/click will unmute via "+trigger);
+        // On true gesture types (touchend/click/pointerup/touchstart with activation), try immediate unmute without play()
+        const validForImmediate = /touchend|pointerup|click|touchstart/i.test(trigger);
+        if (validForImmediate) {
+          try {
+            dbg("[music] trying immediate unmute-only (no play) on "+trigger);
+            audio.muted = false;
+            audio.volume = 0.35;
+            mutedAutoplaySucceeded = false;
+            if (!audio.paused && !audio.muted) {
+              stopAutomaticMusic();
+              musicNeedsGesture = false;
+              updateMusic();
+              dbg("[music] immediate unmute-only succeeded on "+trigger);
+              return;
+            }
+            throw new DOMException("unmute reverted", "NotAllowedError");
+          } catch (e2) {
+            dbg("[music] immediate unmute-only failed, will need next input "+(e2.name||e2.message));
+            audio.muted = true;
+            mutedAutoplaySucceeded = true;
+            musicNeedsGesture = true;
             updateMusic();
-            console.log("[music] immediate unmute-only succeeded");
-            return;
           }
-          // if it re-paused or re-muted, revert
-          throw new DOMException("unmute reverted", "NotAllowedError");
-        } catch (e2) {
-          console.log("[music] immediate unmute-only failed, will need next input", e2.name || e2.message);
-          audio.muted = true;
-          mutedAutoplaySucceeded = true;
-          musicNeedsGesture = true;
-          updateMusic();
         }
-        console.log("[music] muted stream playing — next click/touch/mousedown will unmute, next wheel will try unmute-only");
         return;
       } catch (e) {
-        console.log("[music] muted autoplay also failed", e.name);
+        dbg("[music] muted autoplay also failed "+(e.name||e.message));
       }
       audio.muted = false;
     }
@@ -396,6 +422,10 @@ function onMusicTouchMove(e) {
   if (!automaticMusic) return;
   void startMusic(false, e.type);
 }
+function onMusicTouchEnd(e) {
+  if (!automaticMusic) return;
+  void startMusic(false, e.type);
+}
 function onMusicKey(event) {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest("input, textarea, select, button, a, [contenteditable]")) return;
@@ -408,13 +438,21 @@ function onMusicGesture(event) {
   void startMusic(false, event.type);
 }
 // first-scroll + any first gesture triggers music - matches reference site's "play on first scroll"
+// Use capture-phase for touch so we get the event even if mandap-story or motion.js stops propagation
 window.addEventListener("scroll", onMusicScroll, { passive: true });
 window.addEventListener("wheel", onMusicWheel, { passive: true });
-window.addEventListener("touchmove", onMusicTouchMove, { passive: true });
-window.addEventListener("touchstart", onFirstInteraction, { passive: true });
-window.addEventListener("mousedown", onFirstInteraction, { passive: true });
-window.addEventListener("pointerdown", onFirstInteraction, { passive: true });
-window.addEventListener("click", onFirstInteraction, { passive: true });
+window.addEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
+window.addEventListener("touchstart", onFirstInteraction, { passive: true, capture: true });
+window.addEventListener("touchend", onMusicTouchEnd, { passive: true, capture: true });
+window.addEventListener("mousedown", onFirstInteraction, { passive: true, capture: true });
+window.addEventListener("pointerdown", onFirstInteraction, { passive: true, capture: true });
+window.addEventListener("pointerup", onMusicGesture, { passive: true, capture: true });
+window.addEventListener("click", onFirstInteraction, { passive: true, capture: true });
+document.addEventListener("touchstart", onFirstInteraction, { passive: true, capture: true });
+document.addEventListener("touchend", onMusicTouchEnd, { passive: true, capture: true });
+document.addEventListener("pointerdown", onFirstInteraction, { passive: true, capture: true });
+document.addEventListener("pointerup", onMusicGesture, { passive: true, capture: true });
+document.addEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
 document.addEventListener("keydown", onMusicKey);
 document.addEventListener("pointerup", onMusicGesture);
 // also trigger when entering via mandap buttons
@@ -427,14 +465,15 @@ document.querySelectorAll(".mandap-enter, .mandap-skip, .scroll-cue").forEach((e
 window.addEventListener("load", async () => {
   if (!automaticMusic) return;
   try {
-    if (audio.paused && audio.muted) {
+    if (audio.paused) {
+      audio.muted = true;
       await audio.play();
       mutedAutoplaySucceeded = true;
       musicNeedsGesture = true;
       updateMusic();
-      console.log("[music] primed muted on load");
+      dbg("[music] primed muted on load — ready for first touch");
     }
-  } catch {}
+  } catch(e){ dbg("[music] prime failed "+(e.name||e.message)); }
 });
 
 musicButton.addEventListener("click", () => {
