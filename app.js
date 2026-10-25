@@ -239,20 +239,26 @@ let audioPending = false;
 let automaticMusic = true;
 let musicNeedsGesture = false;
 let mutedAutoplaySucceeded = false;
-// mobile debug visible on screen for 10s — helps diagnose on phone without console
+// mobile debug visible on screen until music plays — helps diagnose on phone without console
 let _debugEl = null;
 function dbg(msg){
   console.log(msg);
   try {
     if (!_debugEl) {
       _debugEl = document.createElement("div");
-      _debugEl.style.cssText="position:fixed;bottom:68px;left:8px;right:8px;z-index:99999;background:rgba(20,15,10,.92);color:#fffbe9;font:11px/1.4 monospace;padding:8px 10px;border-radius:10px;pointer-events:none;max-height:40vh;overflow:auto";
+      _debugEl.style.cssText="position:fixed;bottom:68px;left:8px;right:8px;z-index:99999;background:rgba(20,15,10,.92);color:#fffbe9;font:11px/1.4 monospace;padding:8px 10px;border-radius:10px;pointer-events:auto;max-height:38vh;overflow:auto;cursor:pointer";
+      _debugEl.title="Tap to dismiss";
+      _debugEl.onclick=()=>_debugEl.style.display="none";
       document.body.appendChild(_debugEl);
-      setTimeout(()=>{_debugEl.style.display="none"},15000);
     }
-    _debugEl.textContent = msg + "\n" + _debugEl.textContent.slice(0,600);
+    _debugEl.textContent = new Date().toLocaleTimeString()+" "+msg + "\n" + _debugEl.textContent.slice(0,800);
+    // auto-hide 5s after success
+    if (/audible now|Music on|unmuted without play|primed muted/.test(msg) && !audio.muted && !audio.paused) {
+      setTimeout(()=>{ if(_debugEl) _debugEl.style.display="none"; },5000);
+    }
   } catch{}
 }
+function hideDebug(){ try{ if(_debugEl) _debugEl.style.display="none"; }catch{} }
 // initialize audio for autoplay-muted strategy (allowed without gesture)
 audio.volume = 0.35;
 audio.muted = true;
@@ -313,11 +319,15 @@ function stopAutomaticMusic() {
 }
 
 async function startMusic(manual = false, trigger = "") {
-  // allow unmute path even when a previous play() is pending — critical for mobile where pointerdown->touchend are <100ms apart
+  // FIX: never block a real gesture (touchend/pointerup/click) behind a pending muted play.
+  // Mobile fires touchstart -> touchmove -> touchend in <100ms; the first starts a muted play (pending),
+  // but the second (touchend) IS the activation that must be allowed to run immediately.
   const isUnmuteOnly = !audio.paused && (audio.muted || mutedAutoplaySucceeded);
-  if (audioPending && !isUnmuteOnly) {
-    dbg("[music] blocked pending "+trigger);
-    return;
+  const isRealGesture = /touchend|pointerup|click/i.test(trigger);
+  if (audioPending && !isUnmuteOnly && !isRealGesture) {
+    dbg("[music] queued/ignored pending "+trigger);
+    // don't return for real gestures — let them race and try audible instead
+    if (!isRealGesture) return;
   }
   // If already playing (possibly muted autoplay), just unmute — don't call play() again
   // Unmuting an already-playing muted stream is more likely to be allowed on wheel/scroll than play()
@@ -354,9 +364,10 @@ async function startMusic(manual = false, trigger = "") {
     mutedAutoplaySucceeded = false;
     stopAutomaticMusic();
     console.log("[music] audible play succeeded on first gesture");
+    dbg("[music] ✅ audible succeeded on "+trigger);
+    hideDebug();
   } catch (error) {
-    dbg("[music] audible blocked on "+trigger+": "+(error.name||error.message));
-    musicNeedsGesture = true;
+    dbg("[music] ❌ audible blocked on "+trigger+": "+(error.name||error.message));
     // Wheel/scroll alone is never a valid gesture in Chrome, so audible will always fail there.
     // Start muted playback immediately (allowed without gesture), then next real gesture (click/touch/mousedown) will just unmute.
     // On mobile, touchstart alone is NOT yet an activation — touchend/pointerup IS, so we keep muted stream for the upcoming touchend
