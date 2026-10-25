@@ -90,8 +90,6 @@ tabs.forEach((tab, index) => {
 });
 
 // Venue addresses — bride side as printed on card
-const rosario =
-  "The Rosario Banquet, A-1/23, Opp. Dashrath Puri Metro Station, Gate No. 1, Dwarka Sector-1A, Dabri Palam Road, New Delhi-110045";
 const hotelLeague =
   "Hotel The League, Opp. Air Force School, Delhi Road, Gurugram (Hr.)";
 const wisteria =
@@ -100,13 +98,6 @@ const brideResidence =
   "H.No. A-74, Sanjay Gram, Opp. Sector-14, Gurugram (Hr.) — Mob.: 9717968786, 9971222996";
 
 const programme = [
-  {
-    name: "Ring Ceremony",
-    utc: "20261115T060000Z",
-    location: rosario,
-    description:
-      "11:30 AM IST onwards followed by Lunch. We begin the celebrations by exchanging rings — with love and blessings.",
-  },
   {
     name: "Mehendi",
     utc: "20261119T133000Z",
@@ -166,12 +157,12 @@ calendarDialog.addEventListener("click", (event) => {
 });
 calendarDialog.addEventListener("close", () => calendarTrigger?.focus());
 
-const googleDetails = `With love from the Bride's family — Smt. Sanju Jain & Sh. Pankaj Jain celebrate the wedding of their beloved daughter Dakshita with Animesh (S/o Smt. Renu Jain & Sh. Praveen Jain). Granddaughter of Late Smt. Bina Jain & Late Sh. Magan Chand Jain. Best Compliments: Sh. Shashi Bhushan Jain, Hiten Jain & Purav Jain.\n\nAll times are India Standard Time (IST).\n\nSunday, 15 November 2026 — ${rosario}\nRing Ceremony: 11:30 AM onwards followed by Lunch\n\nThursday, 19 November 2026 — ${hotelLeague}\nMehendi & Ladies Sangeet: 7:00 PM onwards followed by Dinner\n\nFriday, 20 November 2026 — ${wisteria}\nReception of Baraat: 8:30 PM\nDinner: 9:00 PM — Taaron Ki Chhaon Mein\nDoli thereafter\n\nHost: ${brideResidence}\nWe look forward to celebrating with you!`;
+const googleDetails = `With love from the Bride's family — Smt. Sanju Jain & Sh. Pankaj Jain celebrate the wedding of their beloved daughter Dakshita with Animesh (S/o Smt. Renu Jain & Sh. Praveen Jain). Granddaughter of Late Smt. Bina Jain & Late Sh. Magan Chand Jain. Best Compliments: Sh. Shashi Bhushan Jain, Hiten Jain & Purav Jain.\n\nAll times are India Standard Time (IST).\n\nThursday, 19 November 2026 — ${hotelLeague}\nMehendi & Ladies Sangeet: 7:00 PM onwards followed by Dinner\n\nFriday, 20 November 2026 — ${wisteria}\nReception of Baraat: 8:30 PM\nDinner: 9:00 PM — Taaron Ki Chhaon Mein\nDoli thereafter\n\nHost: ${brideResidence}\nWe look forward to celebrating with you!`;
 
 const calendarParams = new URLSearchParams({
   action: "TEMPLATE",
   text: "Dakshita & Animesh | Bride's Wedding Celebrations",
-  dates: "20261115/20261121",
+  dates: "20261119/20261121",
   details: googleDetails,
   location: "Delhi NCR, India",
   ctz: "Asia/Kolkata",
@@ -246,9 +237,53 @@ const audio = document.querySelector("#bg-music");
 const musicButton = document.querySelector("#music-toggle");
 let audioPending = false;
 let automaticMusic = true;
-let scrollMusicAttempted = false;
 let musicNeedsGesture = false;
-const initialScrollY = window.scrollY;
+let mutedAutoplaySucceeded = false;
+// mobile debug visible on screen until music plays — helps diagnose on phone without console
+let _debugEl = null;
+function dbg(msg){
+  console.log(msg);
+  try {
+    if (!_debugEl) {
+      _debugEl = document.createElement("div");
+      _debugEl.style.cssText="position:fixed;bottom:68px;left:8px;right:8px;z-index:99999;background:rgba(20,15,10,.92);color:#fffbe9;font:11px/1.4 monospace;padding:8px 10px;border-radius:10px;pointer-events:auto;max-height:38vh;overflow:auto;cursor:pointer";
+      _debugEl.title="Tap to dismiss";
+      _debugEl.onclick=()=>_debugEl.style.display="none";
+      document.body.appendChild(_debugEl);
+    }
+    _debugEl.textContent = new Date().toLocaleTimeString()+" "+msg + "\n" + _debugEl.textContent.slice(0,800);
+    // auto-hide 5s after success
+    if (/audible now|Music on|unmuted without play|primed muted/.test(msg) && !audio.muted && !audio.paused) {
+      setTimeout(()=>{ if(_debugEl) _debugEl.style.display="none"; },5000);
+    }
+  } catch{}
+}
+function hideDebug(){ try{ if(_debugEl) _debugEl.style.display="none"; }catch{} }
+// initialize audio for autoplay-muted strategy (allowed without gesture)
+audio.volume = 0.35;
+audio.muted = true;
+if (audio.playsInline !== undefined) audio.playsInline = true;
+audio.preload = "auto";
+try { audio.load(); } catch {}
+// detect if HTML autoplay muted succeeded — then first scroll will simply unmute
+setTimeout(() => {
+  if (!audio.paused && audio.muted) {
+    mutedAutoplaySucceeded = true;
+    musicNeedsGesture = true;
+    dbg("[music] muted autoplay active — scroll/touch will unmute");
+    updateMusic();
+  }
+}, 400);
+audio.addEventListener("playing", () => {
+  if (audio.muted && automaticMusic) {
+    mutedAutoplaySucceeded = true;
+    musicNeedsGesture = true;
+    updateMusic();
+  }
+});
+audio.addEventListener("canplaythrough", () => {
+  // pre-loaded, ready for instant play on first scroll
+});
 
 function updateMusic() {
   const playing = !audio.paused;
@@ -265,24 +300,116 @@ function updateMusic() {
 
 function stopAutomaticMusic() {
   automaticMusic = false;
-  window.removeEventListener("scroll", onMusicScroll);
-  window.removeEventListener("wheel", onMusicWheel);
-  window.removeEventListener("touchmove", onMusicTouchMove);
+  window.removeEventListener("scroll", onMusicScroll, { passive: true });
+  window.removeEventListener("wheel", onMusicWheel, { passive: true });
+  window.removeEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
+  window.removeEventListener("touchstart", onFirstInteraction, { passive: true, capture: true });
+  window.removeEventListener("touchend", onMusicTouchEnd, { passive: true, capture: true });
+  window.removeEventListener("mousedown", onFirstInteraction, { passive: true, capture: true });
+  window.removeEventListener("pointerdown", onFirstInteraction, { passive: true, capture: true });
+  window.removeEventListener("pointerup", onMusicGesture, { passive: true, capture: true });
+  window.removeEventListener("click", onFirstInteraction, { passive: true, capture: true });
+  document.removeEventListener("touchstart", onFirstInteraction, { passive: true, capture: true });
+  document.removeEventListener("touchend", onMusicTouchEnd, { passive: true, capture: true });
+  document.removeEventListener("pointerdown", onFirstInteraction, { passive: true, capture: true });
+  document.removeEventListener("pointerup", onMusicGesture, { passive: true, capture: true });
+  document.removeEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
   document.removeEventListener("keydown", onMusicKey);
   document.removeEventListener("pointerup", onMusicGesture);
 }
 
-async function startMusic(manual = false) {
-  if (audioPending || !audio.paused) return;
+async function startMusic(manual = false, trigger = "") {
+  // FIX: never block a real gesture (touchend/pointerup/click) behind a pending muted play.
+  // Mobile fires touchstart -> touchmove -> touchend in <100ms; the first starts a muted play (pending),
+  // but the second (touchend) IS the activation that must be allowed to run immediately.
+  const isUnmuteOnly = !audio.paused && (audio.muted || mutedAutoplaySucceeded);
+  const isRealGesture = /touchend|pointerup|click/i.test(trigger);
+  if (audioPending && !isUnmuteOnly && !isRealGesture) {
+    dbg("[music] queued/ignored pending "+trigger);
+    // don't return for real gestures — let them race and try audible instead
+    if (!isRealGesture) return;
+  }
+  // If already playing (possibly muted autoplay), just unmute — don't call play() again
+  // Unmuting an already-playing muted stream is more likely to be allowed on wheel/scroll than play()
+  if (isUnmuteOnly) {
+    dbg("[music] unmuting playing stream via "+trigger);
+    audio.muted = false;
+    mutedAutoplaySucceeded = false;
+    audio.volume = 0.35;
+    // Only call play() if it actually paused after unmuting (some browsers pause on unmute)
+    if (audio.paused) {
+      try { await audio.play(); dbg("[music] play after unmute ok "+trigger); } catch(e){ dbg("[music] play after unmute failed "+e.name); }
+    } else {
+      dbg("[music] unmuted without play() via "+trigger+" — audible now");
+    }
+    // Check if we actually got audible
+    setTimeout(() => {
+      if (!audio.paused && !audio.muted) {
+        stopAutomaticMusic();
+        musicNeedsGesture = false;
+        updateMusic();
+      }
+    }, 100);
+    stopAutomaticMusic();
+    musicNeedsGesture = false;
+    updateMusic();
+    return;
+  }
   audioPending = true;
   musicNeedsGesture = false;
   try {
     audio.volume = 0.35;
     audio.muted = false;
     await audio.play();
+    mutedAutoplaySucceeded = false;
     stopAutomaticMusic();
+    console.log("[music] audible play succeeded on first gesture");
+    dbg("[music] ✅ audible succeeded on "+trigger);
+    hideDebug();
   } catch (error) {
-    musicNeedsGesture = (manual || automaticMusic) && error.name === "NotAllowedError";
+    dbg("[music] ❌ audible blocked on "+trigger+": "+(error.name||error.message));
+    // Wheel/scroll alone is never a valid gesture in Chrome, so audible will always fail there.
+    // Start muted playback immediately (allowed without gesture), then next real gesture (click/touch/mousedown) will just unmute.
+    // On mobile, touchstart alone is NOT yet an activation — touchend/pointerup IS, so we keep muted stream for the upcoming touchend
+    if (!audio.muted) {
+      try {
+        dbg("[music] starting muted stream (allowed without gesture)");
+        audio.muted = true;
+        await audio.play();
+        mutedAutoplaySucceeded = true;
+        musicNeedsGesture = true;
+        updateMusic();
+        dbg("[music] muted stream playing — next touchend/click will unmute via "+trigger);
+        // On true gesture types (touchend/click/pointerup/touchstart with activation), try immediate unmute without play()
+        const validForImmediate = /touchend|pointerup|click|touchstart/i.test(trigger);
+        if (validForImmediate) {
+          try {
+            dbg("[music] trying immediate unmute-only (no play) on "+trigger);
+            audio.muted = false;
+            audio.volume = 0.35;
+            mutedAutoplaySucceeded = false;
+            if (!audio.paused && !audio.muted) {
+              stopAutomaticMusic();
+              musicNeedsGesture = false;
+              updateMusic();
+              dbg("[music] immediate unmute-only succeeded on "+trigger);
+              return;
+            }
+            throw new DOMException("unmute reverted", "NotAllowedError");
+          } catch (e2) {
+            dbg("[music] immediate unmute-only failed, will need next input "+(e2.name||e2.message));
+            audio.muted = true;
+            mutedAutoplaySucceeded = true;
+            musicNeedsGesture = true;
+            updateMusic();
+          }
+        }
+        return;
+      } catch (e) {
+        dbg("[music] muted autoplay also failed "+(e.name||e.message));
+      }
+      audio.muted = false;
+    }
     if (manual) notify("Music could not play. Please try again.");
   } finally {
     audioPending = false;
@@ -290,37 +417,75 @@ async function startMusic(manual = false) {
   }
 }
 
-function startMusicOnScroll() {
-  if (!automaticMusic || scrollMusicAttempted) return;
-  scrollMusicAttempted = true;
-  void startMusic();
+function onFirstInteraction(e) {
+  if (!automaticMusic) return;
+  void startMusic(false, e.type);
 }
-function onMusicScroll() {
-  if (window.scrollY !== initialScrollY) startMusicOnScroll();
+function onMusicScroll(e) {
+  if (!automaticMusic) return;
+  void startMusic(false, e.type || "scroll");
 }
 function onMusicWheel(event) {
-  if (event.deltaY !== 0 && !event.ctrlKey) startMusicOnScroll();
+  if (!automaticMusic) return;
+  if (event.deltaY !== 0 && !event.ctrlKey) void startMusic(false, "wheel");
 }
-function onMusicTouchMove() {
-  startMusicOnScroll();
+function onMusicTouchMove(e) {
+  if (!automaticMusic) return;
+  void startMusic(false, e.type);
+}
+function onMusicTouchEnd(e) {
+  if (!automaticMusic) return;
+  void startMusic(false, e.type);
 }
 function onMusicKey(event) {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest("input, textarea, select, button, a, [contenteditable]")) return;
   if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(event.key)) {
-    if (automaticMusic && musicNeedsGesture) void startMusic();
-    else startMusicOnScroll();
+    void startMusic(false, "keydown:"+event.key);
   }
 }
 function onMusicGesture(event) {
   if (event.target.closest("#music-toggle")) return;
-  if (automaticMusic && musicNeedsGesture) void startMusic();
+  void startMusic(false, event.type);
 }
+// first-scroll + any first gesture triggers music - matches reference site's "play on first scroll"
+// Use capture-phase for touch so we get the event even if mandap-story or motion.js stops propagation
 window.addEventListener("scroll", onMusicScroll, { passive: true });
 window.addEventListener("wheel", onMusicWheel, { passive: true });
-window.addEventListener("touchmove", onMusicTouchMove, { passive: true });
+window.addEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
+window.addEventListener("touchstart", onFirstInteraction, { passive: true, capture: true });
+window.addEventListener("touchend", onMusicTouchEnd, { passive: true, capture: true });
+window.addEventListener("mousedown", onFirstInteraction, { passive: true, capture: true });
+window.addEventListener("pointerdown", onFirstInteraction, { passive: true, capture: true });
+window.addEventListener("pointerup", onMusicGesture, { passive: true, capture: true });
+window.addEventListener("click", onFirstInteraction, { passive: true, capture: true });
+document.addEventListener("touchstart", onFirstInteraction, { passive: true, capture: true });
+document.addEventListener("touchend", onMusicTouchEnd, { passive: true, capture: true });
+document.addEventListener("pointerdown", onFirstInteraction, { passive: true, capture: true });
+document.addEventListener("pointerup", onMusicGesture, { passive: true, capture: true });
+document.addEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
 document.addEventListener("keydown", onMusicKey);
 document.addEventListener("pointerup", onMusicGesture);
+// also trigger when entering via mandap buttons
+document.querySelectorAll(".mandap-enter, .mandap-skip, .scroll-cue").forEach((el) =>
+  el.addEventListener("click", (e) => {
+    if (automaticMusic) void startMusic(false, e.type+":mandap");
+  }),
+);
+// prime muted stream on load so first scroll can just unmute
+window.addEventListener("load", async () => {
+  if (!automaticMusic) return;
+  try {
+    if (audio.paused) {
+      audio.muted = true;
+      await audio.play();
+      mutedAutoplaySucceeded = true;
+      musicNeedsGesture = true;
+      updateMusic();
+      dbg("[music] primed muted on load — ready for first touch");
+    }
+  } catch(e){ dbg("[music] prime failed "+(e.name||e.message)); }
+});
 
 musicButton.addEventListener("click", () => {
   stopAutomaticMusic();
@@ -350,7 +515,7 @@ document.querySelector("#share-invite").addEventListener("click", async () => {
   const url = `${location.origin}${location.pathname}`;
   const data = {
     title: "Dakshita & Animesh | Bride's Wedding Invitation",
-    text: "Join us for Dakshita & Animesh's wedding celebrations — 15, 19 & 20 November 2026 in Delhi NCR. Ring Ceremony, Mehendi & Sangeet at Hotel The League & Wedding at Wisteria.",
+    text: "Join us for Dakshita & Animesh's wedding celebrations — 19 & 20 November 2026 in Delhi NCR. Mehendi & Sangeet at Hotel The League & Wedding at Wisteria.",
     url,
   };
   try {

@@ -2470,10 +2470,32 @@ footer > span{color:#e2d3b8}
   flex:0 0 auto;
   padding:0 6px;
 }
+/* === MOBILE & TABLET GAP FIX v4 — eliminate flex stretch === */
+@media(max-width:1100px){
+  .couple-feature{gap:12px;margin:12px auto 10px}
+  .couple-feature .name-card h3{font-size:42px}
+  .couple-feature .name-card small{margin-top:3px}
+  .invitation .section-heading{margin-bottom:16px}
+  .section-pad{padding:56px 6%}
+}
 @media(max-width:760px){
-  .couple-feature{flex-direction:column;gap:16px;margin:22px auto}
-  .couple-feature .name-card h3{font-size:44px}
-  .couple-feature .couple-and{font-size:22px}
+  .invitation.section-pad{padding:24px 6% 26px !important}
+  .invitation .section-heading{margin-bottom:10px !important}
+  .invitation-text .invitation-request{margin:8px auto 4px;max-width:320px;font-size:10.5px;line-height:1.6}
+  .couple-feature{flex-direction:column !important;gap:2px !important;margin:8px auto 6px !important;align-items:center !important}
+  .couple-feature .name-card{flex:0 0 auto !important; width:100% !important; max-width:360px !important; min-width:0 !important; padding:0 !important}
+  .couple-feature .name-card h3{font-size:34px !important;margin:0 0 2px !important;line-height:1.05 !important}
+  .couple-feature .name-card .name-lineage{font-size:9.5px !important;line-height:1.4 !important;margin:0 !important}
+  .couple-feature .name-card small{font-size:8px !important;margin-top:2px !important;line-height:1.4 !important}
+  .couple-feature .couple-and{font-size:16px !important;padding:0 !important;margin:0 !important;line-height:1 !important}
+  .invitation-text .invitation-closing{margin-top:8px !important;font-size:15px !important;line-height:1.35 !important}
+  .compliment-line{margin-top:10px !important;padding-top:8px !important;font-size:9.5px !important}
+  .section-pad{padding-top:32px !important;padding-bottom:32px !important}
+  .corner-flower{display:none}
+}
+@media(max-width: 480px){
+  .couple-feature .name-card h3{font-size:30px !important}
+  .invitation.section-pad{padding:20px 5% 24px !important}
 }
 /* Remove old duplicate styles influence */
 .family-pair{display:none !important}
