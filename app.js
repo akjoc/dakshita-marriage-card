@@ -239,12 +239,12 @@ let audioPending = false;
 let automaticMusic = true;
 let musicNeedsGesture = false;
 let mutedAutoplaySucceeded = false;
-// initialize audio — will try muted prime silently, then first real gesture plays audible
+// initialize audio — keep muted autoplay from HTML (autoplay muted playsinline) so first touch-move just unmutes
 audio.volume = 0.35;
 audio.muted = true;
 if (audio.playsInline !== undefined) audio.playsInline = true;
 audio.preload = "auto";
-try { audio.load(); } catch {}
+// don't call audio.load() — it cancels the HTML autoplay muted that makes first-scroll unmute possible
 // detect if HTML autoplay muted succeeded — then first scroll will simply unmute
 setTimeout(() => {
   if (!audio.paused && audio.muted) {
@@ -252,7 +252,7 @@ setTimeout(() => {
     musicNeedsGesture = true;
     updateMusic();
   }
-}, 400);
+}, 300);
 audio.addEventListener("playing", () => {
   if (audio.muted && automaticMusic) {
     mutedAutoplaySucceeded = true;
@@ -299,7 +299,7 @@ function stopAutomaticMusic() {
 
 async function startMusic(manual = false, trigger = "") {
   const isUnmuteOnly = !audio.paused && (audio.muted || mutedAutoplaySucceeded);
-  const isRealGesture = /touchend|pointerup|click/i.test(trigger);
+  const isRealGesture = /touchend|pointerup|click|touchstart|touchmove/i.test(trigger);
   if (audioPending && !isUnmuteOnly && !isRealGesture) {
     if (!isRealGesture) return;
   }
@@ -338,7 +338,8 @@ async function startMusic(manual = false, trigger = "") {
         mutedAutoplaySucceeded = true;
         musicNeedsGesture = true;
         updateMusic();
-        const validForImmediate = /touchend|pointerup|click|touchstart/i.test(trigger);
+        // allow touchmove/scroll to try immediate unmute as well — they carry the gesture on mobile
+        const validForImmediate = /touchend|pointerup|click|touchstart|touchmove|scroll/i.test(trigger);
         if (validForImmediate) {
           try {
             audio.muted = false;
