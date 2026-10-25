@@ -871,4 +871,27 @@
 /* parallax reveal still */
 .cinematic .story-reveal.is-visible{opacity:1}
 
+/* Tap to open — gate opening animation (works with or without JS scroll) */
+.mandap-story.mandap-opening{
+  --gate-angle:104deg !important;
+  --gate-shift:17% !important;
+  --gate-opacity:0 !important;
+  --welcome-opacity:0 !important;
+  --names-opacity:1 !important;
+  --names-y:0px !important;
+  --room-scale:1 !important;
+}
+.mandap-story.mandap-opening .mandap-door,
+.mandap-story.mandap-opening .gate-welcome,
+.mandap-story.mandap-opening .gate-scroll,
+.mandap-story.mandap-opening .mandap-names{
+  transition: transform 1.1s cubic-bezier(0.16,1,0.3,1), opacity .8s ease !important;
+}
+.mandap-story.mandap-opening .mandap-doors{
+  transition: opacity .9s ease .2s !important;
+}
+/* allow tap target inside cinematic gate overlay */
+.cinematic .gate-welcome{ pointer-events:none }
+.cinematic .gate-welcome .gate-seal-button{ pointer-events:auto !important; cursor:pointer; position:relative; z-index:2 }
+.cinematic .gate-scroll{ pointer-events:auto !important; cursor:pointer }
 
