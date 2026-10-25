@@ -238,6 +238,26 @@ const musicButton = document.querySelector("#music-toggle");
 let audioPending = false;
 let automaticMusic = true;
 let musicNeedsGesture = false;
+let mutedAutoplaySucceeded = false;
+// initialize audio for autoplay-muted strategy (allowed without gesture)
+audio.volume = 0.35;
+audio.muted = true;
+if (audio.playsInline !== undefined) audio.playsInline = true;
+// detect if HTML autoplay muted succeeded — then first scroll will simply unmute
+setTimeout(() => {
+  if (!audio.paused && audio.muted) {
+    mutedAutoplaySucceeded = true;
+    musicNeedsGesture = true;
+    updateMusic();
+  }
+}, 400);
+audio.addEventListener("playing", () => {
+  if (audio.muted && automaticMusic) {
+    mutedAutoplaySucceeded = true;
+    musicNeedsGesture = true;
+    updateMusic();
+  }
+});
 
 function updateMusic() {
   const playing = !audio.paused;
@@ -267,15 +287,26 @@ function stopAutomaticMusic() {
 
 async function startMusic(manual = false) {
   if (audioPending) return;
+  // If already playing (possibly muted autoplay), just unmute on first gesture
   if (!audio.paused) {
-    // already playing — if it was muted autoplay, unmute
-    if (audio.muted) {
-      audio.muted = false;
-      audio.volume = 0.35;
-      stopAutomaticMusic();
-      updateMusic();
+    if (audio.muted || mutedAutoplaySucceeded) {
+      try {
+        audio.muted = false;
+        mutedAutoplaySucceeded = false;
+        audio.volume = 0.35;
+        // ensure still playing after unmute
+        if (audio.paused) await audio.play();
+        stopAutomaticMusic();
+        musicNeedsGesture = false;
+        updateMusic();
+        return;
+      } catch (e) {
+        // unmute blocked - keep trying
+      }
+    } else {
+      // already playing audible - nothing to do
+      return;
     }
-    return;
   }
   audioPending = true;
   musicNeedsGesture = false;
@@ -283,6 +314,7 @@ async function startMusic(manual = false) {
     audio.volume = 0.35;
     audio.muted = false;
     await audio.play();
+    mutedAutoplaySucceeded = false;
     stopAutomaticMusic();
   } catch (error) {
     musicNeedsGesture = error.name === "NotAllowedError";
@@ -291,7 +323,9 @@ async function startMusic(manual = false) {
       try {
         audio.muted = true;
         await audio.play();
-        // keep muted playing — next real gesture will unmute
+        mutedAutoplaySucceeded = true;
+        // keep muted playing — next scroll/click will unmute via the !audio.paused path above
+        musicNeedsGesture = true;
         updateMusic();
         return;
       } catch {}
