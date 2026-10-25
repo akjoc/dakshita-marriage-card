@@ -243,6 +243,8 @@ let mutedAutoplaySucceeded = false;
 audio.volume = 0.35;
 audio.muted = true;
 if (audio.playsInline !== undefined) audio.playsInline = true;
+audio.preload = "auto";
+try { audio.load(); } catch {}
 // detect if HTML autoplay muted succeeded — then first scroll will simply unmute
 setTimeout(() => {
   if (!audio.paused && audio.muted) {
@@ -257,6 +259,9 @@ audio.addEventListener("playing", () => {
     musicNeedsGesture = true;
     updateMusic();
   }
+});
+audio.addEventListener("canplaythrough", () => {
+  // pre-loaded, ready for instant play on first scroll
 });
 
 function updateMusic() {
@@ -287,24 +292,30 @@ function stopAutomaticMusic() {
 
 async function startMusic(manual = false) {
   if (audioPending) return;
-  // If already playing (possibly muted autoplay), just unmute on first gesture
+  // If already playing (possibly muted autoplay), just unmute on first gesture — try within same activation
   if (!audio.paused) {
     if (audio.muted || mutedAutoplaySucceeded) {
       try {
         audio.muted = false;
         mutedAutoplaySucceeded = false;
         audio.volume = 0.35;
-        // ensure still playing after unmute
         if (audio.paused) await audio.play();
+        else {
+          // force resume in case unmuting paused it
+          const p = audio.play();
+          if (p) await p.catch(()=>{});
+        }
         stopAutomaticMusic();
         musicNeedsGesture = false;
         updateMusic();
         return;
       } catch (e) {
-        // unmute blocked - keep trying
+        // unmute blocked, will retry
+        musicNeedsGesture = true;
+        updateMusic();
+        return;
       }
     } else {
-      // already playing audible - nothing to do
       return;
     }
   }
@@ -316,19 +327,43 @@ async function startMusic(manual = false) {
     await audio.play();
     mutedAutoplaySucceeded = false;
     stopAutomaticMusic();
+    console.log("[music] audible play succeeded on first gesture");
   } catch (error) {
-    musicNeedsGesture = error.name === "NotAllowedError";
-    // Fallback: try muted autoplay so audio is at least pre-loaded and can be unmuted on next gesture
-    if (musicNeedsGesture && !audio.muted) {
+    console.log("[music] audible play blocked:", error.name);
+    musicNeedsGesture = error.name === "NotAllowedError" || error.name === "NotAllowedError" || true;
+    // Critical: try muted autoplay IMMEDIATELY within same gesture, then unmute right away if possible
+    if (!audio.muted) {
       try {
+        console.log("[music] trying muted autoplay fallback");
         audio.muted = true;
         await audio.play();
         mutedAutoplaySucceeded = true;
-        // keep muted playing — next scroll/click will unmute via the !audio.paused path above
         musicNeedsGesture = true;
         updateMusic();
-        return;
-      } catch {}
+        // Try to unmute immediately still within same user activation
+        try {
+          console.log("[music] trying immediate unmute within same gesture");
+          audio.muted = false;
+          mutedAutoplaySucceeded = false;
+          // some browsers require a second play() after unmuting
+          await audio.play();
+          stopAutomaticMusic();
+          musicNeedsGesture = false;
+          console.log("[music] unmute succeeded immediately");
+          updateMusic();
+          return;
+        } catch (e2) {
+          console.log("[music] immediate unmute failed, will need second gesture", e2.name);
+          // keep muted playing, next gesture will unmute
+          audio.muted = true;
+          mutedAutoplaySucceeded = true;
+          musicNeedsGesture = true;
+          updateMusic();
+          return;
+        }
+      } catch (e) {
+        console.log("[music] muted autoplay also failed", e.name);
+      }
       audio.muted = false;
     }
     if (manual) notify("Music could not play. Please try again.");
