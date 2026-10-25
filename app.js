@@ -290,31 +290,32 @@ function stopAutomaticMusic() {
   document.removeEventListener("pointerup", onMusicGesture);
 }
 
-async function startMusic(manual = false) {
+async function startMusic(manual = false, trigger = "") {
   if (audioPending) return;
-  // If already playing (possibly muted autoplay), just unmute on first gesture — try within same activation
+  // If already playing (possibly muted autoplay), just unmute — don't call play() again
+  // Unmuting an already-playing muted stream is more likely to be allowed on wheel/scroll than play()
   if (!audio.paused) {
     if (audio.muted || mutedAutoplaySucceeded) {
-      try {
-        audio.muted = false;
-        mutedAutoplaySucceeded = false;
-        audio.volume = 0.35;
-        if (audio.paused) await audio.play();
-        else {
-          // force resume in case unmuting paused it
-          const p = audio.play();
-          if (p) await p.catch(()=>{});
-        }
-        stopAutomaticMusic();
-        musicNeedsGesture = false;
-        updateMusic();
-        return;
-      } catch (e) {
-        // unmute blocked, will retry
-        musicNeedsGesture = true;
-        updateMusic();
-        return;
+      console.log("[music] unmuting playing stream via", trigger);
+      audio.muted = false;
+      mutedAutoplaySucceeded = false;
+      audio.volume = 0.35;
+      // Only call play() if it actually paused after unmuting (some browsers pause on unmute)
+      if (audio.paused) {
+        try { await audio.play(); } catch(e){ console.log("[music] play after unmute failed", e.name); }
       }
+      // Check if we actually got audible
+      setTimeout(() => {
+        if (!audio.paused && !audio.muted) {
+          stopAutomaticMusic();
+          musicNeedsGesture = false;
+          updateMusic();
+        }
+      }, 100);
+      stopAutomaticMusic();
+      musicNeedsGesture = false;
+      updateMusic();
+      return;
     } else {
       return;
     }
@@ -329,38 +330,44 @@ async function startMusic(manual = false) {
     stopAutomaticMusic();
     console.log("[music] audible play succeeded on first gesture");
   } catch (error) {
-    console.log("[music] audible play blocked:", error.name);
-    musicNeedsGesture = error.name === "NotAllowedError" || error.name === "NotAllowedError" || true;
-    // Critical: try muted autoplay IMMEDIATELY within same gesture, then unmute right away if possible
+    console.log("[music] audible play blocked on", trigger, ":", error.name);
+    musicNeedsGesture = true;
+    // Wheel/scroll alone is never a valid gesture in Chrome, so audible will always fail there.
+    // Start muted playback immediately (allowed without gesture), then next real gesture (click/touch/mousedown) will just unmute.
     if (!audio.muted) {
       try {
-        console.log("[music] trying muted autoplay fallback");
+        console.log("[music] starting muted stream (allowed without gesture)");
         audio.muted = true;
         await audio.play();
         mutedAutoplaySucceeded = true;
         musicNeedsGesture = true;
         updateMusic();
-        // Try to unmute immediately still within same user activation
+        // Try immediate unmute without calling play() — just flipping muted flag
+        // This sometimes passes for wheel where play() would not, but flipping muted might
         try {
-          console.log("[music] trying immediate unmute within same gesture");
+          console.log("[music] trying immediate unmute-only (no play) on", trigger);
           audio.muted = false;
+          audio.volume = 0.35;
           mutedAutoplaySucceeded = false;
-          // some browsers require a second play() after unmuting
-          await audio.play();
-          stopAutomaticMusic();
-          musicNeedsGesture = false;
-          console.log("[music] unmute succeeded immediately");
-          updateMusic();
-          return;
+          // verify it stuck
+          if (!audio.paused && !audio.muted) {
+            stopAutomaticMusic();
+            musicNeedsGesture = false;
+            updateMusic();
+            console.log("[music] immediate unmute-only succeeded");
+            return;
+          }
+          // if it re-paused or re-muted, revert
+          throw new DOMException("unmute reverted", "NotAllowedError");
         } catch (e2) {
-          console.log("[music] immediate unmute failed, will need second gesture", e2.name);
-          // keep muted playing, next gesture will unmute
+          console.log("[music] immediate unmute-only failed, will need next input", e2.name || e2.message);
           audio.muted = true;
           mutedAutoplaySucceeded = true;
           musicNeedsGesture = true;
           updateMusic();
-          return;
         }
+        console.log("[music] muted stream playing — next click/touch/mousedown will unmute, next wheel will try unmute-only");
+        return;
       } catch (e) {
         console.log("[music] muted autoplay also failed", e.name);
       }
@@ -373,32 +380,32 @@ async function startMusic(manual = false) {
   }
 }
 
-function onFirstInteraction() {
+function onFirstInteraction(e) {
   if (!automaticMusic) return;
-  void startMusic();
+  void startMusic(false, e.type);
 }
-function onMusicScroll() {
+function onMusicScroll(e) {
   if (!automaticMusic) return;
-  void startMusic();
+  void startMusic(false, e.type || "scroll");
 }
 function onMusicWheel(event) {
   if (!automaticMusic) return;
-  if (event.deltaY !== 0 && !event.ctrlKey) void startMusic();
+  if (event.deltaY !== 0 && !event.ctrlKey) void startMusic(false, "wheel");
 }
-function onMusicTouchMove() {
+function onMusicTouchMove(e) {
   if (!automaticMusic) return;
-  void startMusic();
+  void startMusic(false, e.type);
 }
 function onMusicKey(event) {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest("input, textarea, select, button, a, [contenteditable]")) return;
   if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(event.key)) {
-    void startMusic();
+    void startMusic(false, "keydown:"+event.key);
   }
 }
 function onMusicGesture(event) {
   if (event.target.closest("#music-toggle")) return;
-  void startMusic();
+  void startMusic(false, event.type);
 }
 // first-scroll + any first gesture triggers music - matches reference site's "play on first scroll"
 window.addEventListener("scroll", onMusicScroll, { passive: true });
@@ -412,10 +419,23 @@ document.addEventListener("keydown", onMusicKey);
 document.addEventListener("pointerup", onMusicGesture);
 // also trigger when entering via mandap buttons
 document.querySelectorAll(".mandap-enter, .mandap-skip, .scroll-cue").forEach((el) =>
-  el.addEventListener("click", () => {
-    if (automaticMusic) void startMusic();
+  el.addEventListener("click", (e) => {
+    if (automaticMusic) void startMusic(false, e.type+":mandap");
   }),
 );
+// prime muted stream on load so first scroll can just unmute
+window.addEventListener("load", async () => {
+  if (!automaticMusic) return;
+  try {
+    if (audio.paused && audio.muted) {
+      await audio.play();
+      mutedAutoplaySucceeded = true;
+      musicNeedsGesture = true;
+      updateMusic();
+      console.log("[music] primed muted on load");
+    }
+  } catch {}
+});
 
 musicButton.addEventListener("click", () => {
   stopAutomaticMusic();
