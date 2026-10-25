@@ -437,10 +437,34 @@ function openMandapGates() {
   }
 }
 function scrollIntoCelebration() {
-  // give gates time to swing open before scrolling
+  // give gates time to swing open before scrolling, then jump past the 260svh cinematic runway
+  const doScroll = () => {
+    const target = document.querySelector("#home");
+    if (!target) return;
+    // robust scroll: try scrollIntoView, fallback to window.scrollTo with computed offset
+    try {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch {}
+    // fallback / ensure motion completes: after smooth starts, force window position
+    // scrollTo with smooth mimics skip-intro but smooth
+    const top = target.getBoundingClientRect().top + window.scrollY - 8;
+    // if scrollIntoView didn't move after 120ms, force it
+    setTimeout(() => {
+      if (Math.abs(window.scrollY - top) > 40) {
+        window.scrollTo({ top, behavior: "smooth" });
+      }
+    }, 120);
+  };
+  setTimeout(doScroll, 650);
+  // safety: if still at top after 1.4s, instant jump
   setTimeout(() => {
-    document.querySelector("#home")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, 900);
+    const target = document.querySelector("#home");
+    if (!target) return;
+    if (window.scrollY < 100) {
+      const top = target.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top, behavior: "instant" in ScrollOptions ? "instant" : "auto" } );
+    }
+  }, 1600);
 }
 document.getElementById("mandap-unlock")?.addEventListener("click", (e) => {
   e.preventDefault();
