@@ -421,9 +421,30 @@ document.addEventListener("pointerup", onMusicGesture, { passive: true, capture:
 document.addEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
 document.addEventListener("keydown", onMusicKey);
 document.addEventListener("pointerup", onMusicGesture);
-// Tap-to-open mandap WITH MUSIC — reliable mobile unlock (scroll is not a gesture)
+// Tap-to-open — open gates + play music (reliable gesture, scroll is not)
+function openMandapGates() {
+  const story = document.querySelector(".mandap-story");
+  if (story && !story.classList.contains("mandap-opening")) {
+    story.classList.add("mandap-opening");
+    // keep gates open even if motion.js tries to overwrite on next scroll tick
+    // re-assert after motion update
+    setTimeout(() => {
+      story.style.setProperty("--gate-angle", "104deg");
+      story.style.setProperty("--gate-shift", "17%");
+      story.style.setProperty("--gate-opacity", "0");
+      story.style.setProperty("--welcome-opacity", "0");
+    }, 50);
+  }
+}
+function scrollIntoCelebration() {
+  // give gates time to swing open before scrolling
+  setTimeout(() => {
+    document.querySelector("#home")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 900);
+}
 document.getElementById("mandap-unlock")?.addEventListener("click", (e) => {
   e.preventDefault();
+  openMandapGates();
   audio.muted = false;
   audio.volume = 0.35;
   const p = audio.play();
@@ -437,10 +458,21 @@ document.getElementById("mandap-unlock")?.addEventListener("click", (e) => {
   }
   musicNeedsGesture = false;
   updateMusic();
-  document.querySelector("#home")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  scrollIntoCelebration();
 });
-// also trigger when entering via other mandap buttons
-document.querySelectorAll(".mandap-enter, .mandap-skip, .scroll-cue, .gate-scroll, .mandap-stage").forEach((el) =>
+// gate-scroll strip and any mandap stage click also opens
+document.querySelector(".gate-scroll")?.addEventListener("click", () => {
+  document.getElementById("mandap-unlock")?.click();
+});
+document.querySelector(".mandap-stage")?.addEventListener("click", (e) => {
+  if (e.target.closest("#mandap-unlock, .mandap-enter, .mandap-skip")) return;
+  const story = document.querySelector(".mandap-story");
+  if (story && !story.classList.contains("mandap-opening") && window.scrollY < 80) {
+    document.getElementById("mandap-unlock")?.click();
+  }
+});
+// also trigger music when entering via other mandap buttons (fallback)
+document.querySelectorAll(".mandap-enter, .mandap-skip, .scroll-cue").forEach((el) =>
   el.addEventListener("click", (e) => {
     if (automaticMusic && e.currentTarget.id !== "mandap-unlock") void startMusic(false, e.type + ":mandap");
   }),
