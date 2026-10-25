@@ -297,76 +297,78 @@ function stopAutomaticMusic() {
   document.removeEventListener("pointerup", onMusicGesture);
 }
 
-async function startMusic(manual = false, trigger = "") {
+// Sync-preserving unlock — keep gesture alive, no async before play()
+function startMusic(manual = false, trigger = "") {
+  if (!automaticMusic) return;
   const isUnmuteOnly = !audio.paused && (audio.muted || mutedAutoplaySucceeded);
-  const isRealGesture = /touchend|pointerup|click|touchstart|touchmove/i.test(trigger);
-  if (audioPending && !isUnmuteOnly && !isRealGesture) {
-    if (!isRealGesture) return;
-  }
   if (isUnmuteOnly) {
+    // First touch-move / scroll after muted autoplay should become audible instantly — no play() needed
     audio.muted = false;
     mutedAutoplaySucceeded = false;
     audio.volume = 0.35;
-    if (audio.paused) {
-      try { await audio.play(); } catch {}
-    }
-    setTimeout(() => {
-      if (!audio.paused && !audio.muted) {
-        stopAutomaticMusic();
-        musicNeedsGesture = false;
-        updateMusic();
-      }
-    }, 100);
-    stopAutomaticMusic();
     musicNeedsGesture = false;
     updateMusic();
+    // ensure still playing (some browsers pause on unmute)
+    if (audio.paused) {
+      const p = audio.play();
+      if (p) p.catch(() => {});
+    }
+    setTimeout(() => {
+      if (!audio.paused && !audio.muted) stopAutomaticMusic();
+    }, 120);
+    stopAutomaticMusic();
     return;
   }
-  audioPending = true;
+  // Not playing yet — try audible play synchronously so scroll's underlying touch* gesture is not lost
+  audio.muted = false;
+  audio.volume = 0.35;
   musicNeedsGesture = false;
-  try {
-    audio.volume = 0.35;
-    audio.muted = false;
-    await audio.play();
-    mutedAutoplaySucceeded = false;
-    stopAutomaticMusic();
-  } catch (error) {
-    if (!audio.muted) {
-      try {
+  updateMusic();
+  const p = audio.play();
+  if (p) {
+    p.then(() => {
+      mutedAutoplaySucceeded = false;
+      stopAutomaticMusic();
+      musicNeedsGesture = false;
+      updateMusic();
+    }).catch((err) => {
+      // Scroll gives NotAllowedError because scroll is not a gesture — fall back to muted play which IS allowed without gesture
+      if (err && err.name === "NotAllowedError" && !audio.muted) {
         audio.muted = true;
-        await audio.play();
-        mutedAutoplaySucceeded = true;
-        musicNeedsGesture = true;
-        updateMusic();
-        // allow touchmove/scroll to try immediate unmute as well — they carry the gesture on mobile
-        const validForImmediate = /touchend|pointerup|click|touchstart|touchmove|scroll/i.test(trigger);
-        if (validForImmediate) {
-          try {
-            audio.muted = false;
-            audio.volume = 0.35;
-            mutedAutoplaySucceeded = false;
-            if (!audio.paused && !audio.muted) {
-              stopAutomaticMusic();
-              musicNeedsGesture = false;
-              updateMusic();
-              return;
-            }
-            throw new DOMException("unmute reverted", "NotAllowedError");
-          } catch {
-            audio.muted = true;
+        const p2 = audio.play();
+        if (p2) {
+          p2.then(() => {
             mutedAutoplaySucceeded = true;
             musicNeedsGesture = true;
             updateMusic();
-          }
+            // Immediately try unmute again without new play() — for touch* this is still same gesture tick
+            if (/touch|pointer|click|scroll|wheel/i.test(trigger)) {
+              audio.muted = false;
+              audio.volume = 0.35;
+              mutedAutoplaySucceeded = false;
+              if (!audio.paused && !audio.muted) {
+                musicNeedsGesture = false;
+                stopAutomaticMusic();
+                updateMusic();
+              } else {
+                // keep muted so next touchend will unmute
+                audio.muted = true;
+                mutedAutoplaySucceeded = true;
+                musicNeedsGesture = true;
+                updateMusic();
+              }
+            }
+          }).catch(() => {
+            audio.muted = false;
+            if (manual) notify("Music could not play. Please try again.");
+            updateMusic();
+          });
         }
-        return;
-      } catch {}
-      audio.muted = false;
-    }
-    if (manual) notify("Music could not play. Please try again.");
-  } finally {
-    audioPending = false;
-    updateMusic();
+      } else if (manual) {
+        notify("Music could not play. Please try again.");
+      }
+      updateMusic();
+    });
   }
 }
 
