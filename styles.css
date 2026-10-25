@@ -2502,6 +2502,53 @@ footer > span{color:#e2d3b8}
 .couple-names{display:none !important}
 
 
+/* === CENTERING FIX — ensure weds + Dakshita/Animesh all share same central axis === */
+.invitation,
+.invitation .section-heading,
+.invitation-text,
+.couple-feature{
+  text-align:center;
+  justify-content:center;
+  align-items:center;
+}
+.couple-feature{
+  width:100%;
+  margin-left:auto !important;
+  margin-right:auto !important;
+}
+.couple-feature .name-card{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  margin-left:auto;
+  margin-right:auto;
+}
+.couple-feature .name-card h3,
+.couple-feature .name-card .name-lineage,
+.couple-feature .name-card small{
+  text-align:center;
+  width:100%;
+  margin-left:auto;
+  margin-right:auto;
+}
+.couple-feature .couple-and{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  margin-left:auto;
+  margin-right:auto;
+  line-height:1;
+}
+@media(max-width:760px){
+  .couple-feature{
+    justify-items:center;
+    place-items:center;
+  }
+}
+
 .music-widget button.needs-gesture{
   animation: music-pulse 1.6s ease-in-out infinite;
   border-color:#e8a87c;
