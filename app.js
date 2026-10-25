@@ -90,8 +90,6 @@ tabs.forEach((tab, index) => {
 });
 
 // Venue addresses — bride side as printed on card
-const rosario =
-  "The Rosario Banquet, A-1/23, Opp. Dashrath Puri Metro Station, Gate No. 1, Dwarka Sector-1A, Dabri Palam Road, New Delhi-110045";
 const hotelLeague =
   "Hotel The League, Opp. Air Force School, Delhi Road, Gurugram (Hr.)";
 const wisteria =
@@ -100,13 +98,6 @@ const brideResidence =
   "H.No. A-74, Sanjay Gram, Opp. Sector-14, Gurugram (Hr.) — Mob.: 9717968786, 9971222996";
 
 const programme = [
-  {
-    name: "Ring Ceremony",
-    utc: "20261115T060000Z",
-    location: rosario,
-    description:
-      "11:30 AM IST onwards followed by Lunch. We begin the celebrations by exchanging rings — with love and blessings.",
-  },
   {
     name: "Mehendi",
     utc: "20261119T133000Z",
@@ -166,12 +157,12 @@ calendarDialog.addEventListener("click", (event) => {
 });
 calendarDialog.addEventListener("close", () => calendarTrigger?.focus());
 
-const googleDetails = `With love from the Bride's family — Smt. Sanju Jain & Sh. Pankaj Jain celebrate the wedding of their beloved daughter Dakshita with Animesh (S/o Smt. Renu Jain & Sh. Praveen Jain). Granddaughter of Late Smt. Bina Jain & Late Sh. Magan Chand Jain. Best Compliments: Sh. Shashi Bhushan Jain, Hiten Jain & Purav Jain.\n\nAll times are India Standard Time (IST).\n\nSunday, 15 November 2026 — ${rosario}\nRing Ceremony: 11:30 AM onwards followed by Lunch\n\nThursday, 19 November 2026 — ${hotelLeague}\nMehendi & Ladies Sangeet: 7:00 PM onwards followed by Dinner\n\nFriday, 20 November 2026 — ${wisteria}\nReception of Baraat: 8:30 PM\nDinner: 9:00 PM — Taaron Ki Chhaon Mein\nDoli thereafter\n\nHost: ${brideResidence}\nWe look forward to celebrating with you!`;
+const googleDetails = `With love from the Bride's family — Smt. Sanju Jain & Sh. Pankaj Jain celebrate the wedding of their beloved daughter Dakshita with Animesh (S/o Smt. Renu Jain & Sh. Praveen Jain). Granddaughter of Late Smt. Bina Jain & Late Sh. Magan Chand Jain. Best Compliments: Sh. Shashi Bhushan Jain, Hiten Jain & Purav Jain.\n\nAll times are India Standard Time (IST).\n\nThursday, 19 November 2026 — ${hotelLeague}\nMehendi & Ladies Sangeet: 7:00 PM onwards followed by Dinner\n\nFriday, 20 November 2026 — ${wisteria}\nReception of Baraat: 8:30 PM\nDinner: 9:00 PM — Taaron Ki Chhaon Mein\nDoli thereafter\n\nHost: ${brideResidence}\nWe look forward to celebrating with you!`;
 
 const calendarParams = new URLSearchParams({
   action: "TEMPLATE",
   text: "Dakshita & Animesh | Bride's Wedding Celebrations",
-  dates: "20261115/20261121",
+  dates: "20261119/20261121",
   details: googleDetails,
   location: "Delhi NCR, India",
   ctz: "Asia/Kolkata",
@@ -350,7 +341,7 @@ document.querySelector("#share-invite").addEventListener("click", async () => {
   const url = `${location.origin}${location.pathname}`;
   const data = {
     title: "Dakshita & Animesh | Bride's Wedding Invitation",
-    text: "Join us for Dakshita & Animesh's wedding celebrations — 15, 19 & 20 November 2026 in Delhi NCR. Ring Ceremony, Mehendi & Sangeet at Hotel The League & Wedding at Wisteria.",
+    text: "Join us for Dakshita & Animesh's wedding celebrations — 19 & 20 November 2026 in Delhi NCR. Mehendi & Sangeet at Hotel The League & Wedding at Wisteria.",
     url,
   };
   try {
