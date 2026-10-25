@@ -237,9 +237,7 @@ const audio = document.querySelector("#bg-music");
 const musicButton = document.querySelector("#music-toggle");
 let audioPending = false;
 let automaticMusic = true;
-let scrollMusicAttempted = false;
 let musicNeedsGesture = false;
-const initialScrollY = window.scrollY;
 
 function updateMusic() {
   const playing = !audio.paused;
@@ -256,15 +254,29 @@ function updateMusic() {
 
 function stopAutomaticMusic() {
   automaticMusic = false;
-  window.removeEventListener("scroll", onMusicScroll);
-  window.removeEventListener("wheel", onMusicWheel);
-  window.removeEventListener("touchmove", onMusicTouchMove);
+  window.removeEventListener("scroll", onMusicScroll, { passive: true });
+  window.removeEventListener("wheel", onMusicWheel, { passive: true });
+  window.removeEventListener("touchmove", onMusicTouchMove, { passive: true });
+  window.removeEventListener("touchstart", onFirstInteraction, { passive: true });
+  window.removeEventListener("mousedown", onFirstInteraction, { passive: true });
+  window.removeEventListener("pointerdown", onFirstInteraction, { passive: true });
+  window.removeEventListener("click", onFirstInteraction, { passive: true });
   document.removeEventListener("keydown", onMusicKey);
   document.removeEventListener("pointerup", onMusicGesture);
 }
 
 async function startMusic(manual = false) {
-  if (audioPending || !audio.paused) return;
+  if (audioPending) return;
+  if (!audio.paused) {
+    // already playing — if it was muted autoplay, unmute
+    if (audio.muted) {
+      audio.muted = false;
+      audio.volume = 0.35;
+      stopAutomaticMusic();
+      updateMusic();
+    }
+    return;
+  }
   audioPending = true;
   musicNeedsGesture = false;
   try {
@@ -273,7 +285,18 @@ async function startMusic(manual = false) {
     await audio.play();
     stopAutomaticMusic();
   } catch (error) {
-    musicNeedsGesture = (manual || automaticMusic) && error.name === "NotAllowedError";
+    musicNeedsGesture = error.name === "NotAllowedError";
+    // Fallback: try muted autoplay so audio is at least pre-loaded and can be unmuted on next gesture
+    if (musicNeedsGesture && !audio.muted) {
+      try {
+        audio.muted = true;
+        await audio.play();
+        // keep muted playing — next real gesture will unmute
+        updateMusic();
+        return;
+      } catch {}
+      audio.muted = false;
+    }
     if (manual) notify("Music could not play. Please try again.");
   } finally {
     audioPending = false;
@@ -281,37 +304,49 @@ async function startMusic(manual = false) {
   }
 }
 
-function startMusicOnScroll() {
-  if (!automaticMusic || scrollMusicAttempted) return;
-  scrollMusicAttempted = true;
+function onFirstInteraction() {
+  if (!automaticMusic) return;
   void startMusic();
 }
 function onMusicScroll() {
-  if (window.scrollY !== initialScrollY) startMusicOnScroll();
+  if (!automaticMusic) return;
+  void startMusic();
 }
 function onMusicWheel(event) {
-  if (event.deltaY !== 0 && !event.ctrlKey) startMusicOnScroll();
+  if (!automaticMusic) return;
+  if (event.deltaY !== 0 && !event.ctrlKey) void startMusic();
 }
 function onMusicTouchMove() {
-  startMusicOnScroll();
+  if (!automaticMusic) return;
+  void startMusic();
 }
 function onMusicKey(event) {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
   if (event.target.closest("input, textarea, select, button, a, [contenteditable]")) return;
   if (["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(event.key)) {
-    if (automaticMusic && musicNeedsGesture) void startMusic();
-    else startMusicOnScroll();
+    void startMusic();
   }
 }
 function onMusicGesture(event) {
   if (event.target.closest("#music-toggle")) return;
-  if (automaticMusic && musicNeedsGesture) void startMusic();
+  void startMusic();
 }
+// first-scroll + any first gesture triggers music - matches reference site's "play on first scroll"
 window.addEventListener("scroll", onMusicScroll, { passive: true });
 window.addEventListener("wheel", onMusicWheel, { passive: true });
 window.addEventListener("touchmove", onMusicTouchMove, { passive: true });
+window.addEventListener("touchstart", onFirstInteraction, { passive: true });
+window.addEventListener("mousedown", onFirstInteraction, { passive: true });
+window.addEventListener("pointerdown", onFirstInteraction, { passive: true });
+window.addEventListener("click", onFirstInteraction, { passive: true });
 document.addEventListener("keydown", onMusicKey);
 document.addEventListener("pointerup", onMusicGesture);
+// also trigger when entering via mandap buttons
+document.querySelectorAll(".mandap-enter, .mandap-skip, .scroll-cue").forEach((el) =>
+  el.addEventListener("click", () => {
+    if (automaticMusic) void startMusic();
+  }),
+);
 
 musicButton.addEventListener("click", () => {
   stopAutomaticMusic();
