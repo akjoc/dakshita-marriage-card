@@ -421,10 +421,28 @@ document.addEventListener("pointerup", onMusicGesture, { passive: true, capture:
 document.addEventListener("touchmove", onMusicTouchMove, { passive: true, capture: true });
 document.addEventListener("keydown", onMusicKey);
 document.addEventListener("pointerup", onMusicGesture);
-// also trigger when entering via mandap buttons
-document.querySelectorAll(".mandap-enter, .mandap-skip, .scroll-cue").forEach((el) =>
+// Tap-to-open mandap WITH MUSIC — reliable mobile unlock (scroll is not a gesture)
+document.getElementById("mandap-unlock")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  audio.muted = false;
+  audio.volume = 0.35;
+  const p = audio.play();
+  if (p) {
+    p.then(() => {
+      mutedAutoplaySucceeded = false;
+      musicNeedsGesture = false;
+      updateMusic();
+      stopAutomaticMusic();
+    }).catch(() => {});
+  }
+  musicNeedsGesture = false;
+  updateMusic();
+  document.querySelector("#home")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+// also trigger when entering via other mandap buttons
+document.querySelectorAll(".mandap-enter, .mandap-skip, .scroll-cue, .gate-scroll, .mandap-stage").forEach((el) =>
   el.addEventListener("click", (e) => {
-    if (automaticMusic) void startMusic(false, e.type+":mandap");
+    if (automaticMusic && e.currentTarget.id !== "mandap-unlock") void startMusic(false, e.type + ":mandap");
   }),
 );
 // prime muted stream on load so first scroll can just unmute — fail silently
