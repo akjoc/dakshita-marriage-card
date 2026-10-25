@@ -2470,10 +2470,29 @@ footer > span{color:#e2d3b8}
   flex:0 0 auto;
   padding:0 6px;
 }
+/* === MOBILE & TABLET GAP FIX — tighten invitation couple block === */
+@media(max-width:1100px){
+  .couple-feature{gap:20px;margin:20px auto 14px}
+  .couple-feature .name-card h3{font-size:46px}
+  .invitation .section-heading{margin-bottom:22px}
+}
 @media(max-width:760px){
-  .couple-feature{flex-direction:column;gap:16px;margin:22px auto}
-  .couple-feature .name-card h3{font-size:44px}
-  .couple-feature .couple-and{font-size:22px}
+  .invitation.section-pad{padding:36px 6% 38px}
+  .invitation .section-heading{margin-bottom:16px}
+  .invitation-text .invitation-request{margin:10px auto 6px;max-width:320px}
+  .couple-feature{flex-direction:column;gap:8px;margin:14px auto 10px;align-items:center}
+  .couple-feature .name-card{flex:0 0 auto !important; width:100%; max-width:360px; min-width:0}
+  .couple-feature .name-card h3{font-size:38px;margin-bottom:4px;line-height:1.05}
+  .couple-feature .name-card .name-lineage{font-size:10px;line-height:1.5}
+  .couple-feature .name-card small{font-size:8.5px;margin-top:4px;line-height:1.5}
+  .couple-feature .couple-and{font-size:18px;padding:0;margin:-2px 0}
+  .invitation-text .invitation-closing{margin-top:10px;font-size:17px;line-height:1.4}
+  .compliment-line{margin-top:14px;padding-top:10px}
+  .section-pad{padding-top:42px;padding-bottom:42px}
+}
+@media(max-width: 480px){
+  .couple-feature .name-card h3{font-size:34px}
+  .invitation.section-pad{padding:28px 5% 32px}
 }
 /* Remove old duplicate styles influence */
 .family-pair{display:none !important}
